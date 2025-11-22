@@ -146,7 +146,7 @@ PlasmoidItem {
             var output = data["stdout"]
             var deviceInfo = parseDeviceInfo(output)
             
-            if (deviceInfo && deviceInfo.isBluetooth && deviceInfo.percentage >= 0) {
+            if (deviceInfo && deviceInfo.isWireless && deviceInfo.percentage >= 0) {
                 pendingDevices.push(deviceInfo)
             }
             
@@ -200,24 +200,28 @@ PlasmoidItem {
         var device = {
             name: "",
             serial: "",
+            nativePath: "",
             percentage: -1,
             type: "",
             icon: "input-mouse",
-            isBluetooth: false
+            isWireless: false
         }
         
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i].trim()
             
-            // Check for Bluetooth devices
+            // Check for wireless devices (Bluetooth, Xbox Wireless, etc.)
             if (line.indexOf("native-path:") !== -1) {
+                device.nativePath = line.split(":")[1].trim()
                 var path = line.toLowerCase()
+                // Include bluez (Bluetooth), gip (Xbox wireless), and other wireless protocols
                 if (path.indexOf("bluez") !== -1 || 
                     path.indexOf("bluetooth") !== -1 ||
                     path.indexOf("ps-controller") !== -1 ||
                     path.indexOf("hid") !== -1 ||
+                    path.indexOf("gip") !== -1 || // Xbox Wireless dongle
                     /[0-9a-f]{2}[:\-_][0-9a-f]{2}[:\-_][0-9a-f]{2}/.test(path)) {
-                    device.isBluetooth = true
+                    device.isWireless = true
                 }
             }
             
@@ -267,6 +271,11 @@ PlasmoidItem {
                 device.type = "tablet"
                 device.icon = "tablet"
             }
+        }
+        
+        // Use native path as identifier if no serial/MAC (for Xbox wireless controllers)
+        if (!device.serial && device.nativePath) {
+            device.serial = device.nativePath
         }
         
         return device
@@ -443,7 +452,7 @@ PlasmoidItem {
                 visible: bluetoothDevices.length === 0
                 text: "No Bluetooth devices with battery info found"
                 Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
+                horizontalAlignment: Text.AlignHLeft
                 color: Kirigami.Theme.disabledTextColor
             }
             
