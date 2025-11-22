@@ -384,52 +384,60 @@ PlasmoidItem {
                             }
                             
                             Item {
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                                Layout.fillHeight: true
+                                Layout.fillWidth: true
+                            }
+                            
+                            // Progress bar (default state)
+                            PlasmaComponents.ProgressBar {
+                                Layout.preferredWidth: Kirigami.Units.gridUnit * 6
+                                visible: !parent.parent.isHovered
+                                from: 0
+                                to: 100
+                                value: modelData.percentage
+                            }
+                            
+                            // Buttons (on hover)
+                            RowLayout {
+                                spacing: Kirigami.Units.smallSpacing
+                                visible: parent.parent.isHovered
                                 
-                                PlasmaComponents.ProgressBar {
-                                    anchors.fill: parent
-                                    visible: !parent.parent.parent.isHovered
-                                    from: 0
-                                    to: 100
-                                    value: modelData.percentage
-                                }
-                                
-                                // Buttons shown on hover
-                                RowLayout {
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    spacing: Kirigami.Units.smallSpacing
-                                    visible: parent.parent.parent.isHovered
+                                PlasmaComponents.ToolButton {
+                                    icon.name: hiddenDevices.indexOf(modelData.serial) === -1 ? "view-visible" : "view-hidden"
+                                    text: hiddenDevices.indexOf(modelData.serial) === -1 ? "Hide" : "Show"
+                                    display: PlasmaComponents.AbstractButton.IconOnly
+                                    onClicked: toggleDeviceVisibility(modelData.serial)
                                     
-                                    PlasmaComponents.ToolButton {
-                                        icon.name: hiddenDevices.indexOf(modelData.serial) === -1 ? "visibility" : "hint"
-                                        icon.width: Kirigami.Units.iconSizes.small
-                                        icon.height: Kirigami.Units.iconSizes.small
+                                    MouseArea {
+                                        id: hideTooltipArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        propagateComposedEvents: true
+                                        onPressed: mouse.accepted = false
                                         
                                         PlasmaComponents.ToolTip {
                                             text: hiddenDevices.indexOf(modelData.serial) === -1 ? "Hide from tray" : "Show in tray"
                                         }
-                                        
-                                        onClicked: toggleDeviceVisibility(modelData.serial)
                                     }
+                                }
+                                
+                                PlasmaComponents.ToolButton {
+                                    icon.name: "network-disconnect"
+                                    text: "Disconnect"
+                                    display: PlasmaComponents.AbstractButton.IconOnly
+                                    onClicked: disconnectDevice(modelData.serial)
                                     
-                                    PlasmaComponents.ToolButton {
-                                        icon.name: "network-disconnect"
-                                        icon.width: Kirigami.Units.iconSizes.small
-                                        icon.height: Kirigami.Units.iconSizes.small
+                                    MouseArea {
+                                        id: disconnectTooltipArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        propagateComposedEvents: true
+                                        onPressed: mouse.accepted = false
                                         
                                         PlasmaComponents.ToolTip {
                                             text: "Disconnect device"
                                         }
-                                        
-                                        onClicked: disconnectDevice(modelData.serial)
                                     }
                                 }
-                            }
-                            
-                            Item {
-                                Layout.preferredWidth: Kirigami.Units.largeSpacing
                             }
                             
                             PlasmaComponents.Label {
