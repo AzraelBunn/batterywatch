@@ -41,8 +41,19 @@ PlasmoidItem {
     toolTipMainText: "Device Battery Monitor"
     toolTipSubText: "No devices"
     
-    // Hide widget when no visible devices
-    Plasmoid.status: hasVisibleDevices ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.HiddenStatus
+    // Hide widget when no visible devices (except when user is configuring or panel is in edit mode)
+    Plasmoid.status: {
+        // Always show widget when user is configuring it
+        if (Plasmoid.userConfiguring) {
+            return PlasmaCore.Types.ActiveStatus
+        }
+        // Check for containment edit mode (for panel edit mode)
+        if (Plasmoid.containment && Plasmoid.containment.corona && Plasmoid.containment.corona.editMode) {
+            return PlasmaCore.Types.ActiveStatus
+        }
+        // Otherwise, hide completely when no devices
+        return hasVisibleDevices ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.HiddenStatus
+    }
     
     function updateTooltip() {
         if (connectedDevices.length === 0) {
@@ -224,14 +235,32 @@ PlasmoidItem {
     
     // Compact representation (what shows in the system tray)
     compactRepresentation: Item {
+        property bool inEditMode: {
+            if (Plasmoid.userConfiguring) return true
+            if (Plasmoid.containment && Plasmoid.containment.corona && Plasmoid.containment.corona.editMode) return true
+            return false
+        }
         
-        Layout.minimumWidth: root.hasVisibleDevices ? -1 : 0
-        Layout.minimumHeight: root.hasVisibleDevices ? -1 : 0
-        Layout.preferredWidth: root.hasVisibleDevices ? row.implicitWidth : 0
-        Layout.preferredHeight: root.hasVisibleDevices ? row.implicitHeight : 0
-        Layout.maximumWidth: root.hasVisibleDevices ? -1 : 0
-        Layout.maximumHeight: root.hasVisibleDevices ? -1 : 0
-        visible: root.hasVisibleDevices
+        property bool shouldShow: root.hasVisibleDevices || inEditMode
+        
+        // Only take space when we should be visible
+        Layout.minimumWidth: shouldShow ? -1 : 0
+        Layout.minimumHeight: shouldShow ? -1 : 0
+        Layout.preferredWidth: shouldShow ? (root.hasVisibleDevices ? row.implicitWidth : placeholderIcon.width) : 0
+        Layout.preferredHeight: shouldShow ? (root.hasVisibleDevices ? row.implicitHeight : placeholderIcon.height) : 0
+        Layout.maximumWidth: shouldShow ? -1 : 0
+        Layout.maximumHeight: shouldShow ? -1 : 0
+        
+        // Placeholder icon when no devices are visible (only in edit mode)
+        Kirigami.Icon {
+            id: placeholderIcon
+            anchors.centerIn: parent
+            source: "battery-profile-performance"
+            width: Kirigami.Units.iconSizes.smallMedium
+            height: Kirigami.Units.iconSizes.smallMedium
+            visible: !root.hasVisibleDevices && inEditMode
+            opacity: 0.5
+        }
         
         RowLayout {
             id: row
@@ -262,7 +291,6 @@ PlasmoidItem {
         
         MouseArea {
             anchors.fill: parent
-            enabled: root.hasVisibleDevices
             onClicked: root.expanded = !root.expanded
         }
     }

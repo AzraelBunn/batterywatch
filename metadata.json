@@ -6,10 +6,10 @@
             }
         ],
         "Category": "System Information",
-        "Description": "Display battery percentage of connected Bluetooth devices in the system tray",
+        "Description": "Display battery percentage of connected devices in the system tray",
         "Icon": "battery-profile-performance",
         "Id": "com.github.itayavra.btbattery",
-        "Name": "Bluetooth Battery Monitor",
+        "Name": "Device Battery Monitor",
         "Version": "1.0",
         "Website": "https://github.com/itayavra/btbattery"
     },
