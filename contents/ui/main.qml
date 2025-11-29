@@ -319,7 +319,7 @@ PlasmoidItem {
                 spacing: Kirigami.Units.smallSpacing
                 
                 PlasmaComponents.Label {
-                    text: "Device Power Levels"
+                    text: "Device Battery Levels"
                     font.bold: true
                     font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
                     Layout.fillWidth: true
