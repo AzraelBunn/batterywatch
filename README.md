@@ -5,7 +5,9 @@
 ## Screenshots
 
 ![BatteryWatch Screenshot 1](contents/screenshots/screenshot1.png)
+
 ![BatteryWatch Screenshot 2](contents/screenshots/screenshot2.png)
+
 ![BatteryWatch Screenshot 3](contents/screenshots/screenshot3.png)
 
 ## ✨ Features
