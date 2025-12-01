@@ -55,4 +55,4 @@ If you find BatteryWatch useful and want to support its development, consider bu
 
 ## 📄 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the GPL-3.0 License. See `LICENSE` for more information.
