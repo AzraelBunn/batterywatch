@@ -47,6 +47,12 @@ kpackagetool6 --type Plasma/Applet --install BatteryWatch.plasmoid
 
 Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/itayavra/batterywatch/issues).
 
+## ❤️ Support the Project
+
+If you find BatteryWatch useful and want to support its development, consider buying me a coffee 🫶 ☕
+
+<a href="https://www.buymeacoffee.com/itayavra" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
 ## 📄 License
 
 Distributed under the MIT License. See `LICENSE` for more information.
