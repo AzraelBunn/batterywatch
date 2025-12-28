@@ -6,6 +6,7 @@ import org.kde.plasma.components 3.0 as PlasmaComponents
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami 2.20 as Kirigami
 import org.kde.config as KConfig
+import "DeviceParser.js" as DeviceParser
 
 PlasmoidItem {
     id: root
@@ -27,14 +28,7 @@ PlasmoidItem {
     property bool hasAnyDevices: connectedDevices.length > 0
     property bool allDevicesHidden: hasAnyDevices && !hasVisibleDevices
     
-    ConnectionType {
-        id: connectionType
-    }
-    
-    DeviceParser {
-        id: deviceParser
-        connectionTypes: connectionType
-    }
+
     
     preferredRepresentation: compactRepresentation
     
@@ -54,6 +48,15 @@ PlasmoidItem {
         // Show widget if there are ANY devices (even if all hidden), so users can unhide them
         return hasAnyDevices ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.HiddenStatus
     }
+
+    // Connection Types Enum
+    QtObject {
+        id: connectionType
+        readonly property int wired: 0
+        readonly property int wireless: 1
+        readonly property int bluetooth: 2
+    }
+
     
     function updateTooltip() {
         if (connectedDevices.length === 0) {
@@ -217,11 +220,7 @@ PlasmoidItem {
             var objectPath = parts[parts.length-1]
             
             var output = data["stdout"]
-            // Use existing parser logic (inline or external)
-            // We deleted usage of DeviceParser.qml in previous plan but code is still there?
-            // Actually deviceParser is still in the file line 34.
-            
-            var deviceInfo = deviceParser.parseDeviceInfo(output)
+            var deviceInfo = DeviceParser.parseDeviceInfo(output, connectionType)
             
             if (deviceInfo && deviceInfo.percentage >= 0) {
                 // Store the DBus object path for syncing
