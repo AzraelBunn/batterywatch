@@ -5,7 +5,7 @@ import org.kde.plasma.plasma5support 2.0 as P5Support
 import org.kde.plasma.components 3.0 as PlasmaComponents
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami 2.20 as Kirigami
-import org.kde.config as KConfig
+import "DeviceParser.js" as DeviceParser
 
 PlasmoidItem {
     id: root
@@ -27,14 +27,7 @@ PlasmoidItem {
     property bool hasAnyDevices: connectedDevices.length > 0
     property bool allDevicesHidden: hasAnyDevices && !hasVisibleDevices
     
-    ConnectionType {
-        id: connectionType
-    }
-    
-    DeviceParser {
-        id: deviceParser
-        connectionTypes: connectionType
-    }
+
     
     preferredRepresentation: compactRepresentation
     
@@ -54,6 +47,14 @@ PlasmoidItem {
         // Show widget if there are ANY devices (even if all hidden), so users can unhide them
         return hasAnyDevices ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.HiddenStatus
     }
+
+    QtObject {
+        id: connectionType
+        readonly property int wired: 0
+        readonly property int wireless: 1
+        readonly property int bluetooth: 2
+    }
+
     
     function updateTooltip() {
         if (connectedDevices.length === 0) {
@@ -97,55 +98,65 @@ PlasmoidItem {
         hiddenDevices = hiddenDevices.slice() // Trigger property change
         saveHiddenDevices()
         updateTooltip()
-        Plasmoid.status = Plasmoid.status // Force status update
     }
     
-    function disconnectBluetoothDevice(serial) {
-        bluetoothCtlSource.connectSource("bluetoothctl disconnect " + serial)
+    function disconnectBluetoothDevice(bluetoothAddress) {
+        if (bluetoothAddress) {
+            bluetoothCtlSource.connectSource("bluetoothctl disconnect " + bluetoothAddress)
+        }
+    }
+    
+    function refreshDevices() {
+        upowerPresenceSource.connectSource("upower -e")
     }
     
     Component.onCompleted: {
         loadHiddenDevices()
     }
     
-    // D-Bus connection to UPower
     P5Support.DataSource {
-        id: upowerSource
+        id: upowerPresenceSource
         engine: "executable"
         connectedSources: []
         interval: 0
         
         onNewData: function(sourceName, data) {
             disconnectSource(sourceName)
-            
             var lines = data["stdout"].split("\n")
-            deviceCheckCount = 0
-            deviceDetailsSource.pendingDevices = []
-            deviceDetailsSource.processedCount = 0
+            var foundPaths = []
             
-            // Count how many devices we need to check
+            // Collect all current valid device paths
             for (var i = 0; i < lines.length; i++) {
                 var line = lines[i].trim()
                 if (line.startsWith("/org/freedesktop/UPower/devices/") && 
                     line.indexOf("DisplayDevice") === -1) {
-                    deviceCheckCount++
+                    foundPaths.push(line)
+                    
+                    var known = false
+                    for (var j = 0; j < connectedDevices.length; j++) {
+                        // Compare against the DBus object path
+                        if (connectedDevices[j].objectPath === line) {
+                            known = true
+                            break
+                        }
+                    }
+                    if (!known) {
+                        refreshSpecificDevice(line)
+                    }
                 }
             }
             
-            // If no devices, clear the list immediately
-            if (deviceCheckCount === 0) {
-                connectedDevices = []
-                updateTooltip()
-                return
+            // Remove devices that are no longer present
+            var pathsToRemove = []
+            for (var i = 0; i < connectedDevices.length; i++) {
+                var device = connectedDevices[i]
+                if (device.objectPath && foundPaths.indexOf(device.objectPath) === -1) {
+                    pathsToRemove.push(device.objectPath)
+                }
             }
             
-            // Now query each device
-            for (var i = 0; i < lines.length; i++) {
-                var line = lines[i].trim()
-                if (line.startsWith("/org/freedesktop/UPower/devices/") && 
-                    line.indexOf("DisplayDevice") === -1) {
-                    getDeviceDetails(line)
-                }
+            for (var i = 0; i < pathsToRemove.length; i++) {
+                handleDeviceRemoved(pathsToRemove[i])
             }
         }
         
@@ -154,44 +165,63 @@ PlasmoidItem {
         }
     }
     
+    // Presence Timer: Checks for connected devices
+    Timer {
+        id: presenceTimer
+        interval: 2000 
+        running: true
+        repeat: true
+        onTriggered: {
+            upowerPresenceSource.connectSource("upower -e")
+        }
+    }
+    
+    // Battery Update Timer: Refreshes levels for connected devices
+    Timer {
+        id: updateTimer
+        interval: 60000 
+        running: true
+        repeat: true
+        onTriggered: {
+            for (var i = 0; i < connectedDevices.length; i++) {
+                if (connectedDevices[i].objectPath) {
+                    refreshSpecificDevice(connectedDevices[i].objectPath)
+                }
+            }
+        }
+    }
+    
+
+    
+    // Device Details Fetcher: Gets info for specific device
     P5Support.DataSource {
         id: deviceDetailsSource
         engine: "executable"
         connectedSources: []
         interval: 0
         
-        property var pendingDevices: []
-        property int processedCount: 0
-        
         onNewData: function(sourceName, data) {
             disconnectSource(sourceName)
             
+            // Extract the original DBus path from the command
+            // sourceName is "upower -i /org/freedesktop/UPower/devices/..."
+            var parts = sourceName.split(" ")
+            var objectPath = parts[parts.length-1]
+            
             var output = data["stdout"]
-            var deviceInfo = deviceParser.parseDeviceInfo(output)
+            var deviceInfo = DeviceParser.parseDeviceInfo(output, connectionType)
             
+            // Only show wireless/Bluetooth devices, not wired
             if (deviceInfo && deviceInfo.connectionType !== connectionType.wired && deviceInfo.percentage >= 0) {
-                pendingDevices.push(deviceInfo)
-            }
-            
-            processedCount++
-            
-            // Check if all devices have been processed
-            if (processedCount >= deviceCheckCount) {
-                // Sort by name first, then by serial/MAC address
-                pendingDevices.sort(function(a, b) {
-                    var nameCompare = a.name.localeCompare(b.name)
-                    if (nameCompare !== 0) {
-                        return nameCompare
-                    }
-                    return a.serial.localeCompare(b.serial)
-                })
-                connectedDevices = pendingDevices.slice()
-                updateTooltip()
-                pendingDevices = []
-                processedCount = 0
-                deviceCheckCount = 0
+                // Store the DBus object path for syncing
+                deviceInfo.objectPath = objectPath
+                updateOrAddDevice(deviceInfo)
             }
         }
+    }
+    
+    function refreshSpecificDevice(path) {
+        deviceDetailsSource.connectSource("upower -i " + path)
     }
     
     P5Support.DataSource {
@@ -203,37 +233,50 @@ PlasmoidItem {
         onNewData: function(sourceName, data) {
             disconnectSource(sourceName)
             // Trigger refresh after disconnect
-            Qt.callLater(function() {
-                deviceCheckCount = 0
-                deviceDetailsSource.pendingDevices = []
-                deviceDetailsSource.processedCount = 0
-                upowerSource.connectSource("upower -e")
-            })
+            Qt.callLater(refreshDevices)
         }
     }
     
-    property int deviceCheckCount: 0
+
     
-    function getDeviceDetails(devicePath) {
-        deviceDetailsSource.connectSource("upower -i " + devicePath)
-    }
-    
-    // Timer to refresh device list periodically
-    Timer {
-        id: refreshTimer
-        interval: 5000 
-        running: true
-        repeat: true
+    function updateOrAddDevice(deviceInfo) {
+        var found = false
+        for (var i = 0; i < connectedDevices.length; i++) {
+            var sameSerial = connectedDevices[i].serial && connectedDevices[i].serial === deviceInfo.serial
+            var samePath = connectedDevices[i].objectPath && connectedDevices[i].objectPath === deviceInfo.objectPath
+            
+            if (sameSerial || samePath) {
+                connectedDevices[i] = deviceInfo
+                found = true
+                break
+            }
+        }
         
-        onTriggered: {
-            deviceCheckCount = 0
-            deviceDetailsSource.pendingDevices = []
-            deviceDetailsSource.processedCount = 0
-            upowerSource.connectSource("upower -e")
+        if (!found) {
+            connectedDevices.push(deviceInfo)
         }
+        
+        // Re-sort and trigger update
+        connectedDevices.sort(function(a, b) {
+            var nameCompare = a.name.localeCompare(b.name)
+            if (nameCompare !== 0) return nameCompare
+            return a.serial.localeCompare(b.serial)
+        })
+        connectedDevices = connectedDevices.slice() // Trigger property change
+        updateTooltip()
     }
     
-    // Compact representation (what shows in the system tray)
+    function handleDeviceRemoved(objectPath) {
+        var newDevices = []
+        for (var i = 0; i < connectedDevices.length; i++) {
+            if (connectedDevices[i].objectPath !== objectPath) {
+                newDevices.push(connectedDevices[i])
+            }
+        }
+        connectedDevices = newDevices
+        updateTooltip()
+    }
+    
     compactRepresentation: Item {
         property bool inEditMode: {
             if (Plasmoid.userConfiguring) return true
@@ -259,7 +302,6 @@ PlasmoidItem {
             width: Kirigami.Units.iconSizes.smallMedium
             height: Kirigami.Units.iconSizes.smallMedium
             visible: !root.hasVisibleDevices && (inEditMode || root.allDevicesHidden)
-            opacity: 1
         }
         
         RowLayout {
@@ -295,7 +337,6 @@ PlasmoidItem {
         }
     }
     
-    // Full representation (popup when clicked)
     fullRepresentation: Item {
         Layout.minimumWidth: Kirigami.Units.gridUnit * 25
         Layout.preferredWidth: Kirigami.Units.gridUnit * 30
@@ -335,10 +376,7 @@ PlasmoidItem {
                     }
                     
                     onClicked: {
-                        deviceCheckCount = 0
-                        deviceDetailsSource.pendingDevices = []
-                        deviceDetailsSource.processedCount = 0
-                        upowerSource.connectSource("upower -e")
+                        refreshDevices()
                     }
                 }
             }
@@ -404,11 +442,11 @@ PlasmoidItem {
                                         Layout.alignment: Qt.AlignVCenter
                                         
                                         PlasmaComponents.ToolButton {
-                                            visible: modelData.connectionType === connectionType.bluetooth
+                                            visible: modelData.connectionType === connectionType.bluetooth && modelData.bluetoothAddress
                                             icon.name: "network-disconnect"
                                             text: "Disconnect"
                                             display: PlasmaComponents.AbstractButton.IconOnly
-                                            onClicked: disconnectBluetoothDevice(modelData.serial)
+                                            onClicked: disconnectBluetoothDevice(modelData.bluetoothAddress)
                                             
                                             PlasmaComponents.ToolTip {
                                                 text: "Disconnect device"
