@@ -193,7 +193,7 @@ PlasmoidItem {
     
 
     
-    // 3. Device Details Fetcher: Gets info for specific device
+    // Device Details Fetcher: Gets info for specific device
     P5Support.DataSource {
         id: deviceDetailsSource
         engine: "executable"
@@ -201,7 +201,7 @@ PlasmoidItem {
         interval: 0
         
         onNewData: function(sourceName, data) {
-            disconnectSource(sourceName) // Single shot
+            disconnectSource(sourceName)
             
             // Extract the original DBus path from the command
             // sourceName is "upower -i /org/freedesktop/UPower/devices/..."
