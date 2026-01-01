@@ -1,22 +1,18 @@
 import QtQuick 2.15
 import org.kde.plasma.plasma5support 2.0 as P5Support
-import "CompanionProvider.js" as Logic
+import "../DeviceParser.js" as DeviceParser
 
-// Companion service provider - thin QML wrapper around JS logic
-// This is OPTIONAL - the widget works without it
+// Companion service provider (OPTIONAL - widget works without it)
 Item {
-    id: provider
+    id: root
     visible: false
     
-    // Output: list of devices from companion service
     property var devices: []
     property bool available: false
     
     function refresh() {
-        pollSource.connectSource(pollCommand)
+        pollSource.connectSource("gdbus call --session --dest org.batterywatch.Companion --object-path /org/batterywatch/Companion --method org.batterywatch.Companion.GetDevices 2>/dev/null")
     }
-    
-    readonly property string pollCommand: "gdbus call --session --dest org.batterywatch.Companion --object-path /org/batterywatch/Companion --method org.batterywatch.Companion.GetDevices 2>/dev/null"
     
     P5Support.DataSource {
         id: pollSource
@@ -28,40 +24,84 @@ Item {
             disconnectSource(sourceName)
             
             var output = data["stdout"] || ""
-            var exitCode = data["exit code"]
-            
-            if (exitCode === 0 && output.trim().length > 0) {
-                var parsed = Logic.parseAllDevices(output)
-                if (parsed !== null) {
-                    provider.devices = parsed
-                    if (!provider.available) {
-                        provider.available = true
-                        console.log("BatteryWatch: Companion service connected")
-                    }
-                }
-            } else {
-                if (provider.available) {
-                    provider.available = false
-                    provider.devices = []
+            if (data["exit code"] !== 0 || !output.trim()) {
+                if (root.available) {
+                    root.available = false
+                    root.devices = []
                     console.log("BatteryWatch: Companion service not available")
                 }
+                return
+            }
+            
+            // Parse gdbus output: ('json_string',)
+            var match = output.match(/\('(.*)'\,?\)/)
+            if (!match) return
+            
+            try {
+                var jsonStr = match[1].replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+                var rawDevices = JSON.parse(jsonStr)
+                
+                if (!Array.isArray(rawDevices)) return
+                
+                root.devices = rawDevices.map(function(d) {
+                    return parseDevice(d)
+                }).filter(function(d) { return d !== null })
+                
+                if (!root.available) {
+                    root.available = true
+                    console.log("BatteryWatch: Companion service connected")
+                }
+            } catch (e) {
+                console.warn("BatteryWatch: Failed to parse companion data:", e)
             }
         }
     }
     
-    // Poll every 10s
-    Timer {
-        interval: 10000
-        running: true
-        repeat: true
-        onTriggered: provider.refresh()
+    function parseDevice(data) {
+        if (!data || typeof data !== 'object') return null
+        
+        var id = data.id || data.address || ""
+        if (!id) return null
+        
+        var deviceType = data.device_type || "unknown"
+        var icon = data.icon_name || DeviceParser.getIconForType(deviceType)
+        
+        // Handle batteries array
+        var batteries = []
+        var percentage = 0
+        
+        if (Array.isArray(data.batteries) && data.batteries.length > 0) {
+            var total = 0
+            data.batteries.forEach(function(bat) {
+                var pct = typeof bat.percentage === 'number' ? bat.percentage : 0
+                total += pct
+                batteries.push({
+                    label: bat.label || null,
+                    percentage: pct,
+                    charging: bat.charging === true
+                })
+            })
+            percentage = Math.round(total / batteries.length)
+        } else if (typeof data.percentage === 'number') {
+            percentage = data.percentage
+        }
+        
+        return {
+            name: data.name || data.model || "Unknown Device",
+            serial: id,
+            percentage: percentage,
+            icon: icon,
+            type: deviceType,
+            batteries: batteries,
+            model: data.model || "",
+            source: "companion",
+            nativePath: "",
+            objectPath: "",
+            connectionType: 2,
+            bluetoothAddress: id
+        }
     }
     
-    // Initial poll after 2s
-    Timer {
-        interval: 2000
-        running: true
-        repeat: false
-        onTriggered: provider.refresh()
-    }
+    Timer { interval: 10000; running: true; repeat: true; onTriggered: root.refresh() }
+    Timer { interval: 2000; running: true; repeat: false; onTriggered: root.refresh() }
 }

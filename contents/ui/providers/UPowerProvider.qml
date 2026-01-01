@@ -1,20 +1,22 @@
 import QtQuick 2.15
 import org.kde.plasma.plasma5support 2.0 as P5Support
-import "UPowerProvider.js" as Logic
+import "../DeviceParser.js" as DeviceParser
 
-// UPower device provider - thin QML wrapper around JS logic
+// UPower device provider
 Item {
-    id: provider
+    id: root
     visible: false
     
-    // Output: list of devices from UPower
     property var devices: []
+    
+    readonly property int wiredType: 0
+    readonly property int wirelessType: 1
+    readonly property int bluetoothType: 2
     
     function refresh() {
         listSource.connectSource("upower -e")
     }
     
-    // Fetch device list
     P5Support.DataSource {
         id: listSource
         engine: "executable"
@@ -24,24 +26,35 @@ Item {
         onNewData: function(sourceName, data) {
             disconnectSource(sourceName)
             
-            var result = Logic.parseDeviceList(data["stdout"], provider.devices)
+            var lines = data["stdout"].split("\n")
+            var foundPaths = []
             
-            // Fetch details for new devices
-            for (var i = 0; i < result.newPaths.length; i++) {
-                detailsSource.connectSource("upower -i " + result.newPaths[i])
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim()
+                if (line.startsWith("/org/freedesktop/UPower/devices/") && 
+                    line.indexOf("DisplayDevice") === -1) {
+                    foundPaths.push(line)
+                    
+                    // Fetch details for unknown devices
+                    var known = root.devices.some(function(d) { return d.objectPath === line })
+                    if (!known) {
+                        detailsSource.connectSource("upower -i " + line)
+                    }
+                }
             }
             
             // Remove disconnected devices
-            var filtered = Logic.filterDisconnectedDevices(provider.devices, result.foundPaths)
-            if (filtered.length !== provider.devices.length) {
-                provider.devices = filtered
+            var filtered = root.devices.filter(function(d) {
+                return !d.objectPath || foundPaths.indexOf(d.objectPath) !== -1
+            })
+            if (filtered.length !== root.devices.length) {
+                root.devices = filtered
             }
         }
         
         Component.onCompleted: connectSource("upower -e")
     }
     
-    // Fetch device details
     P5Support.DataSource {
         id: detailsSource
         engine: "executable"
@@ -51,17 +64,34 @@ Item {
         onNewData: function(sourceName, data) {
             disconnectSource(sourceName)
             
-            var parts = sourceName.split(" ")
-            var objectPath = parts[parts.length - 1]
+            var objectPath = sourceName.split(" ").pop()
+            var connectionTypes = { wired: root.wiredType, wireless: root.wirelessType, bluetooth: root.bluetoothType }
+            var info = DeviceParser.parseDeviceInfo(data["stdout"], connectionTypes)
             
-            var deviceInfo = Logic.parseDeviceDetails(data["stdout"], objectPath)
-            if (deviceInfo) {
-                provider.devices = Logic.updateDeviceInList(provider.devices, deviceInfo)
+            if (info && info.connectionType !== root.wiredType && info.percentage >= 0) {
+                info.objectPath = objectPath
+                info.source = "upower"
+                
+                // Update or add device
+                var updated = false
+                var newDevices = root.devices.map(function(d) {
+                    if (d.objectPath === objectPath || (d.serial && d.serial === info.serial)) {
+                        updated = true
+                        return info
+                    }
+                    return d
+                })
+                
+                if (!updated) {
+                    newDevices.push(info)
+                }
+                
+                newDevices.sort(function(a, b) { return (a.name || "").localeCompare(b.name || "") })
+                root.devices = newDevices
             }
         }
     }
     
-    // Check for device changes every 2s
     Timer {
         interval: 2000
         running: true
@@ -69,17 +99,16 @@ Item {
         onTriggered: listSource.connectSource("upower -e")
     }
     
-    // Refresh battery levels every 60s
     Timer {
         interval: 60000
         running: true
         repeat: true
         onTriggered: {
-            for (var i = 0; i < provider.devices.length; i++) {
-                if (provider.devices[i].objectPath) {
-                    detailsSource.connectSource("upower -i " + provider.devices[i].objectPath)
+            root.devices.forEach(function(d) {
+                if (d.objectPath) {
+                    detailsSource.connectSource("upower -i " + d.objectPath)
                 }
-            }
+            })
         }
     }
 }
