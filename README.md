@@ -49,6 +49,19 @@ zip -r BatteryWatch.plasmoid .
 kpackagetool6 --type Plasma/Applet --install BatteryWatch.plasmoid
 ```
 
+## Development
+
+```bash
+# Install development version
+./dev-install.sh
+
+# Restart Plasma Shell to reload changes
+./dev-restart-plasma.sh
+
+# Uninstall development version
+./dev-uninstall.sh
+```
+
 ## Contributing
 
 Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/itayavra/batterywatch/issues).
