@@ -3,7 +3,7 @@ import org.kde.plasma.plasma5support 2.0 as P5Support
 import org.kde.plasma.plasmoid 2.0
 import "../DeviceUtils.js" as DeviceUtils
 
-// OpenLinkHub device provider v 1.0.0
+// OpenLinkHub device provider v 1.1.0
 //		  (\_/)
 //		 =('.')=
 //		/|" ‾ "|\
@@ -228,15 +228,17 @@ Item {
 
 // The most idiotic thing about JS.
 // You can't copy objects normally.
-// Those 2 lines of code made me stay up for hours.
+// It made me stay up for hours.
 // Why can't there be something like Lua's table.deepcopy()
 // I just wanted an identical object that's not linked.
 // Why didn't JSON.parse(JSON.stringify(currentDevices)); work
 // I hate it here.
+//
 //		  (\_/)
 //		 =(x.x)=
 //		/|‾‾‾‾‾|\
 //		 |_____|
-// 	
-// 		~AzzyBunn
+// 	~AzzyBunn
+//
 // -- in memory of AzzyBunn's sanity
+//
